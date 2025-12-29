@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Shrimp Disease Detection Machine</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(135deg, #1a1a2e, #16213e);
+            overflow: hidden;
+            font-family: 'Arial', sans-serif;
+        }
+        
+        #container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+        
+        #ui {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 100;
+            color: white;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 15px;
+            border-radius: 10px;
+            backdrop-filter: blur(10px);
+        }
+        
+        #controls {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 100;
+            display: flex;
+            gap: 10px;
+        }
+        
+        button {
+            padding: 12px 24px;
+            background: linear-gradient(45deg, #00d4ff, #0099cc);
+            border: none;
+            border-radius: 25px;
+            color: white;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0, 212, 255, 0.3);
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 212, 255, 0.5);
+        }
+        
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+        
+        #status {
+            position: absolute;
+            top: 50%;
+            right: 20px;
+            transform: translateY(-50%);
+            z-index: 100;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            border-radius: 15px;
+            color: white;
+            min-width: 200px;
+            backdrop-filter: blur(10px);
+        }
+        
+        .status-item {
+            margin: 10px 0;
+            padding: 8px;
+            border-radius: 5px;
+            transition: all 0.3s ease;
+        }
+        
+        .healthy { background: rgba(0, 255, 0, 0.2); }
+        .infected { background: rgba(255, 0, 0, 0.2); }
+        .scanning { background: rgba(0, 212, 255, 0.2); }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="ui">
+            <h3>🦐 Shrimp Disease Detection System</h3>
+            <p>Advanced AI-powered aquaculture health monitoring</p>
+            <div>Database: 1,247 shrimp samples</div>
+            <div>Accuracy: 98.5%</div>
+        </div>
+        
+        <div id="status">
+            <h4>Scan Results</h4>
+            <div id="result-display">Ready to scan...</div>
+            <div id="disease-info"></div>
+        </div>
+        
+        <div id="controls">
+            <button onclick="startScanning()" id="scanBtn">Start Scanning</button>
+            <button onclick="resetMachine()" id="resetBtn">Reset</button>
+        </div>
+    </div>
+
+    <script>
+        let scene, camera, renderer, machine, shrimp, scanningLight;
+        let isScanning = false;
+        let animationFrame;
+        
+        // Machine parts
+        let head, leftArm, rightArm, dataScreen, resultScreen;
+        
+        // Disease database
+        const diseases = [
+            { name: "White Spot Disease", severity: "high", color: 0xff4444 },
+            { name: "Black Gill Disease", severity: "medium", color: 0xff8844 },
+            { name: "Vibriosis", severity: "high", color: 0xff2222 },
+            { name: "Healthy", severity: "none", color: 0x44ff44 }
+        ];
+        
+        function init() {
+            // Scene setup
+            scene = new THREE.Scene();
+            scene.fog = new THREE.Fog(0x1a1a2e, 10, 50);
+            
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 5, 10);
+            camera.lookAt(0, 0, 0);
+            
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setClearColor(0x1a1a2e);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            document.getElementById('container').appendChild(renderer.domElement);
+            
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0x404040, 0.3);
+            scene.add(ambientLight);
+            
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(10, 10, 5);
+            directionalLight.castShadow = true;
+            directionalLight.shadow.mapSize.width = 2048;
+            directionalLight.shadow.mapSize.height = 2048;
+            scene.add(directionalLight);
+            
+            // Create machine
+            createMachine();
+            createShrimp();
+            createEnvironment();
+            
+            animate();
+        }
+        
+        function createMachine() {
+            machine = new THREE.Group();
+            
+            // Base platform
+            const baseGeometry = new THREE.CylinderGeometry(3, 3.5, 0.5, 8);
+            const baseMaterial = new THREE.MeshPhongMaterial({ 
+                color: 0x333333,
+                shininess: 100 
+            });
+            const base = new THREE.Mesh(baseGeometry, baseMaterial);
+            base.position.y = -2;
+            base.receiveShadow = true;
+            machine.add(base);
+            
+            // Central column
+            const columnGeometry = new THREE.CylinderGeometry(0.3, 0.3, 4, 8);
+            const columnMaterial = new THREE.MeshPhongMaterial({ 
+                color: 0x666666,
+                shininess: 50 
+            });
+            const column = new THREE.Mesh(columnGeometry, columnMaterial);
+            column.position.y = 0;
+            column.castShadow = true;
+            machine.add(column);
+            
+            // Head (Data Collection Unit)
+            const headGeometry = new THREE.BoxGeometry(2.5, 1.5, 2);
+            const headMaterial = new THREE.MeshPhongMaterial({ 
+                color: 0x4a90e2,
+                shininess: 100 
+            });
+            head = new THREE.Mesh(headGeometry, headMaterial);
+            head.position.y = 2.5;
+            head.castShadow = true;
+            machine.add(head);
+            
+            // Data screen on head
+            const screenGeometry = new THREE.PlaneGeometry(2, 1.2);
+            const screenMaterial = new THREE.MeshBasicMaterial({ 
+                color: 0x00ff00,
+                transparent: true,
+                opacity: 0.8 
+            });
+            dataScreen = new THREE.Mesh(screenGeometry, screenMaterial);
+            dataScreen.position.set(0, 2.5, 1.01);
+            machine.add(dataScreen);
+            
+            // Head label
+            createLabel("DATA COLLECTION", 0, 3.5, 0);
+            
+            // Left arm
+            const armGeometry = new THREE.CylinderGeometry(0.15, 0.15, 3, 8);
+            const armMaterial = new THREE.MeshPhongMaterial({ 
+                color: 0x888888,
+                shininess: 50 
+            });
+            leftArm = new THREE.Mesh(armGeometry, armMaterial);
+            leftArm.position.set(-2, 1, 0);
+            leftArm.rotation.z = Math.PI / 4;
+            leftArm.castShadow = true;
+            machine.add(leftArm);
+            
+            // Right arm
+            rightArm = new THREE.Mesh(armGeometry, armMaterial);
+            rightArm.position.set(2, 1, 0);
+            rightArm.rotation.z = -Math.PI / 4;
+            rightArm.castShadow = true;
+            machine.add(rightArm);
+            
+            // Hand grippers
+            createGripper(-3, 0, 0);
+            createGripper(3, 0, 0);
+            
+            // Scanning light
+            scanningLight = new THREE.SpotLight(0x00ffff, 0, 10, Math.PI / 6);
+            scanningLight.position.set(0, 4, 0);
+            scanningLight.target.position.set(0, -1, 0);
+            scanningLight.visible = false;
+            scene.add(scanningLight);
+            scene.add(scanningLight.target);
+            
+            // Result screen
+            const resultScreenGeometry = new THREE.PlaneGeometry(1.5, 1);
+            const resultScreenMaterial = new THREE.MeshBasicMaterial({ 
+                color: 0x222222,
+                transparent: true,
+                opacity: 0.9 
+            });
+            resultScreen = new THREE.Mesh(resultScreenGeometry, resultScreenMaterial);
+            resultScreen.position.set(0, 0.5, 2.5);
+            machine.add(resultScreen);
+            
+            scene.add(machine);
+        }
+        
+        function createGripper(x, y, z) {
+            const gripperGroup = new THREE.Group();
+            
+            // Gripper base
+            const baseGeometry = new THREE.SphereGeometry(0.3, 8, 6);
+            const baseMaterial = new THREE.MeshPhongMaterial({ 
+                color: 0xaaaaaa,
+                shininess: 100 
+            });
+            const gripperBase = new THREE.Mesh(baseGeometry, baseMaterial);
+            gripperBase.castShadow = true;
+            gripperGroup.add(gripperBase);
+            
+            // Gripper claws
+            const clawGeometry = new THREE.BoxGeometry(0.1, 0.4, 0.05);
+            const clawMaterial = new THREE.MeshPhongMaterial({ color: 0x999999 });
+            
+            const claw1 = new THREE.Mesh(clawGeometry, clawMaterial);
+            claw1.position.set(0.2, 0, 0);
+            gripperGroup.add(claw1);
+            
+            const claw2 = new THREE.Mesh(clawGeometry, clawMaterial);
+            claw2.position.set(-0.2, 0, 0);
+            gripperGroup.add(claw2);
+            
+            gripperGroup.position.set(x, y, z);
+            machine.add(gripperGroup);
+        }
+        
+        function createLabel(text, x, y, z) {
+            // Simple text representation using planes
+            const labelGeometry = new THREE.PlaneGeometry(2, 0.3);
+            const labelMaterial = new THREE.MeshBasicMaterial({ 
+                color: 0xffffff,
+                transparent: true,
+                opacity: 0.9 
+            });
+            const label = new THREE.Mesh(labelGeometry, labelMaterial);
+            label.position.set(x, y, z);
+            machine.add(label);
+        }
+        
+        function createShrimp() {
+            const shrimpGroup = new THREE.Group();
+            
+            // Shrimp body (simplified)
+            const bodyGeometry = new THREE.CylinderGeometry(0.1, 0.05, 0.8, 6);
+            const bodyMaterial = new THREE.MeshPhongMaterial({ 
+                color: 0xffa500,
+                shininess: 30 
+            });
+            const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+            body.rotation.z = Math.PI / 2;
+            body.castShadow = true;
+            shrimpGroup.add(body);
+            
+            // Shrimp head
+            const headGeometry = new THREE.SphereGeometry(0.12, 8, 6);
+            const head = new THREE.Mesh(headGeometry, bodyMaterial);
+            head.position.x = 0.3;
+            head.castShadow = true;
+            shrimpGroup.add(head);
+            
+            // Tail
+            const tailGeometry = new THREE.ConeGeometry(0.08, 0.3, 6);
+            const tail = new THREE.Mesh(tailGeometry, bodyMaterial);
+            tail.position.x = -0.5;
+            tail.rotation.z = -Math.PI / 2;
+            tail.castShadow = true;
+            shrimpGroup.add(tail);
+            
+            shrimp = shrimpGroup;
+            shrimp.position.set(0, -1, 1);
+            shrimp.receiveShadow = true;
+            scene.add(shrimp);
+        }
+        
+        function createEnvironment() {
+            // Floor
+            const floorGeometry = new THREE.PlaneGeometry(20, 20);
+            const floorMaterial = new THREE.MeshLambertMaterial({ color: 0x222222 });
+            const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+            floor.rotation.x = -Math.PI / 2;
+            floor.position.y = -3;
+            floor.receiveShadow = true;
+            scene.add(floor);
+            
+            // Background particles
+            const particleGeometry = new THREE.BufferGeometry();
+            const particleCount = 1000;
+            const positions = new Float32Array(particleCount * 3);
+            
+            for (let i = 0; i < particleCount * 3; i++) {
+                positions[i] = (Math.random() - 0.5) * 50;
+            }
+            
+            particleGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            const particleMaterial = new THREE.PointsMaterial({ 
+                color: 0x4a90e2, 
+                size: 0.1,
+                transparent: true,
+                opacity: 0.6 
+            });
+            const particles = new THREE.Points(particleGeometry, particleMaterial);
+            scene.add(particles);
+        }
+        
+        function startScanning() {
+            if (isScanning) return;
+            
+            isScanning = true;
+            document.getElementById('scanBtn').disabled = true;
+            document.getElementById('result-display').innerHTML = '<div class="status-item scanning">Scanning in progress...</div>';
+            
+            // Move shrimp to scanning position
+            animateToPosition(shrimp, { x: 0, y: -0.5, z: 0 }, 1000, () => {
+                // Start scanning light
+                scanningLight.visible = true;
+                scanningLight.intensity = 2;
+                
+                // Animate scanning
+                let scanProgress = 0;
+                const scanInterval = setInterval(() => {
+                    scanProgress += 0.1;
+                    scanningLight.angle = Math.sin(scanProgress) * 0.3 + 0.5;
+                    scanningLight.intensity = Math.sin(scanProgress * 2) * 1 + 1.5;
+                    
+                    // Update data screen
+                    dataScreen.material.color.setHSL((scanProgress * 0.1) % 1, 1, 0.5);
+                    
+                    if (scanProgress > 10) {
+                        clearInterval(scanInterval);
+                        completeScanning();
+                    }
+                }, 100);
+            });
+        }
+        
+        function completeScanning() {
+            // Random disease result
+            const diseaseResult = diseases[Math.floor(Math.random() * diseases.length)];
+            
+            // Update shrimp color based on result
+            const shrimpMaterial = shrimp.children[0].material;
+            shrimpMaterial.color.setHex(diseaseResult.color);
+            
+            // Update result screen
+            resultScreen.material.color.setHex(diseaseResult.color);
+            
+            // Update UI
+            const statusClass = diseaseResult.name === "Healthy" ? "healthy" : "infected";
+            document.getElementById('result-display').innerHTML = `
+                <div class="status-item ${statusClass}">
+                    <strong>Result: ${diseaseResult.name}</strong><br>
+                    Confidence: ${Math.floor(Math.random() * 10) + 90}%
+                </div>
+            `;
+            
+            if (diseaseResult.name !== "Healthy") {
+                document.getElementById('disease-info').innerHTML = `
+                    <div style="margin-top: 10px; padding: 10px; background: rgba(255, 0, 0, 0.1); border-radius: 5px;">
+                        <strong>Disease Information:</strong><br>
+                        Severity: ${diseaseResult.severity}<br>
+                        Recommended: Isolate specimen
+                    </div>
+                `;
+            } else {
+                document.getElementById('disease-info').innerHTML = `
+                    <div style="margin-top: 10px; padding: 10px; background: rgba(0, 255, 0, 0.1); border-radius: 5px;">
+                        <strong>Status: Healthy</strong><br>
+                        Safe for cultivation
+                    </div>
+                `;
+            }
+            
+            // Turn off scanning light
+            scanningLight.visible = false;
+            
+            // Move shrimp back
+            setTimeout(() => {
+                animateToPosition(shrimp, { x: 0, y: -1, z: 1 }, 1000, () => {
+                    isScanning = false;
+                    document.getElementById('scanBtn').disabled = false;
+                });
+            }, 2000);
+            
+            // Reset data screen
+            dataScreen.material.color.setHex(0x00ff00);
+        }
+        
+        function resetMachine() {
+            if (isScanning) return;
+            
+            // Reset shrimp color
+            shrimp.children.forEach(child => {
+                if (child.material) {
+                    child.material.color.setHex(0xffa500);
+                }
+            });
+            
+            // Reset screens
+            resultScreen.material.color.setHex(0x222222);
+            dataScreen.material.color.setHex(0x00ff00);
+            
+            // Reset UI
+            document.getElementById('result-display').innerHTML = 'Ready to scan...';
+            document.getElementById('disease-info').innerHTML = '';
+            
+            // Reset shrimp position
+            animateToPosition(shrimp, { x: 0, y: -1, z: 1 }, 500);
+        }
+        
+        function animateToPosition(object, targetPos, duration, callback) {
+            const startPos = { x: object.position.x, y: object.position.y, z: object.position.z };
+            const startTime = Date.now();
+            
+            function update() {
+                const elapsed = Date.now() - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+                const eased = 1 - Math.pow(1 - progress, 3); // Ease out cubic
+                
+                object.position.x = startPos.x + (targetPos.x - startPos.x) * eased;
+                object.position.y = startPos.y + (targetPos.y - startPos.y) * eased;
+                object.position.z = startPos.z + (targetPos.z - startPos.z) * eased;
+                
+                if (progress < 1) {
+                    requestAnimationFrame(update);
+                } else if (callback) {
+                    callback();
+                }
+            }
+            
+            update();
+        }
+        
+        function animate() {
+            animationFrame = requestAnimationFrame(animate);
+            
+            // Rotate machine slightly
+            machine.rotation.y += 0.002;
+            
+            // Floating animation for shrimp
+            if (!isScanning) {
+                shrimp.position.y += Math.sin(Date.now() * 0.003) * 0.001;
+                shrimp.rotation.y += 0.01;
+            }
+            
+            // Head data screen animation
+            dataScreen.material.opacity = 0.8 + Math.sin(Date.now() * 0.005) * 0.2;
+            
+            // Camera orbit
+            const time = Date.now() * 0.0005;
+            camera.position.x = Math.cos(time) * 12;
+            camera.position.z = Math.sin(time) * 12;
+            camera.lookAt(0, 0, 0);
+            
+            renderer.render(scene, camera);
+        }
+        
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+        
+        window.addEventListener('resize', onWindowResize);
+        
+        // Initialize the scene
+        init();
+    </script>
+</body>
+</html>
